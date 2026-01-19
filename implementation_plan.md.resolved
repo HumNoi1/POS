@@ -1,0 +1,263 @@
+# POS System - Implementation Plan
+
+ระบบ Point of Sale สำหรับร้านขายของชำ ใช้ **Vue.js** เป็น Frontend และ **Node.js (Express)** เป็น Backend พร้อม **SQLite** สำหรับเก็บข้อมูล
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Technology Stack Confirmation**
+> - Frontend: Vue 3 + Vite + Pinia (state management)
+> - Backend: Express.js + SQLite (better-sqlite3)
+> - Styling: Vanilla CSS with modern design
+> 
+> ต้องการใช้ stack อื่นหรือไม่?
+
+> [!WARNING]
+> **Offline-First Design**
+> ระบบจะทำงานแบบ localhost เท่านั้น (ไม่มี cloud sync)
+> ข้อมูลจะเก็บในไฟล์ SQLite บนเครื่อง
+
+---
+
+## Project Structure
+
+```
+POS/
+├── frontend/                 # Vue.js application
+│   ├── src/
+│   │   ├── components/       # UI components
+│   │   ├── views/            # Page views
+│   │   ├── stores/           # Pinia stores
+│   │   ├── services/         # API services
+│   │   └── assets/           # CSS, images
+│   └── package.json
+│
+├── backend/                  # Node.js API server
+│   ├── src/
+│   │   ├── routes/           # API routes
+│   │   ├── models/           # Database models
+│   │   ├── controllers/      # Business logic
+│   │   └── database/         # SQLite setup
+│   ├── data/                 # SQLite database files
+│   └── package.json
+│
+└── README.md
+```
+
+---
+
+## Proposed Changes
+
+### Backend - Node.js/Express
+
+#### [NEW] [package.json](file:///c:/Users/frame/Documents/GitHub/POS/backend/package.json)
+- Express server setup
+- Dependencies: express, better-sqlite3, cors, uuid
+
+#### [NEW] [server.js](file:///c:/Users/frame/Documents/GitHub/POS/backend/src/server.js)
+- Main Express server entry point
+- Port: 3001
+
+#### [NEW] [database.js](file:///c:/Users/frame/Documents/GitHub/POS/backend/src/database/database.js)
+- SQLite connection and schema initialization
+- Tables: products, transactions, transaction_items, settings
+
+#### [NEW] [productRoutes.js](file:///c:/Users/frame/Documents/GitHub/POS/backend/src/routes/productRoutes.js)
+- `GET /api/products` - List all products
+- `GET /api/products/:barcode` - Get by barcode
+- `POST /api/products` - Create product
+- `PUT /api/products/:id` - Update product
+- `DELETE /api/products/:id` - Delete product
+
+#### [NEW] [salesRoutes.js](file:///c:/Users/frame/Documents/GitHub/POS/backend/src/routes/salesRoutes.js)
+- `POST /api/sales` - Create sale transaction
+- `GET /api/sales` - List transactions
+- `GET /api/sales/:id` - Get transaction detail
+- `DELETE /api/sales/:id` - Void transaction
+
+#### [NEW] [reportRoutes.js](file:///c:/Users/frame/Documents/GitHub/POS/backend/src/routes/reportRoutes.js)
+- `GET /api/reports/daily` - Daily sales report
+- `GET /api/reports/monthly` - Monthly sales report
+- `GET /api/reports/top-products` - Top selling products
+- `GET /api/reports/export` - Export to CSV
+
+---
+
+### Frontend - Vue.js
+
+#### [NEW] [package.json](file:///c:/Users/frame/Documents/GitHub/POS/frontend/package.json)
+- Vue 3 + Vite setup
+- Dependencies: vue, pinia, vue-router, axios
+
+#### [NEW] [POSView.vue](file:///c:/Users/frame/Documents/GitHub/POS/frontend/src/views/POSView.vue)
+หน้าจอหลัก POS ประกอบด้วย:
+
+**Zone A - Barcode Scanner**
+- Input field ที่ focus ตลอดเวลา
+- รับ barcode จาก scanner (ทำงานเหมือนคีย์บอร์ด)
+- กด Enter เพื่อเพิ่มสินค้า
+- ถ้าไม่พบ barcode → แสดง modal เพิ่มสินค้าใหม่
+
+**Zone B - Shopping Cart**
+- ตารางแสดง: ชื่อ, ราคา/หน่วย, จำนวน, รวม
+- ปุ่ม +/- สำหรับเพิ่ม/ลดจำนวน
+- ปุ่มลบรายการ
+- สแกนซ้ำ = เพิ่มจำนวนอัตโนมัติ
+
+**Zone C - Bill Summary**
+- Subtotal, ส่วนลด, Grand Total
+- ปุ่มชำระเงิน (Cash/PromptPay)
+- ปุ่ม Hold Bill, Void Bill
+
+#### [NEW] [ProductsView.vue](file:///c:/Users/frame/Documents/GitHub/POS/frontend/src/views/ProductsView.vue)
+- ตารางรายการสินค้า
+- ปุ่มเพิ่ม/แก้ไข/ลบ
+- Form: Barcode, ชื่อ, ราคาขาย, ต้นทุน, หน่วย, สต็อก
+
+#### [NEW] [ReportsView.vue](file:///c:/Users/frame/Documents/GitHub/POS/frontend/src/views/ReportsView.vue)
+- ยอดขายวันนี้/เดือนนี้
+- จำนวนบิล
+- สินค้าขายดี (Top 10)
+- สรุปกำไร
+
+#### [NEW] [cartStore.js](file:///c:/Users/frame/Documents/GitHub/POS/frontend/src/stores/cartStore.js)
+- Pinia store สำหรับจัดการ shopping cart
+- Actions: addItem, removeItem, updateQuantity, clearCart
+
+#### [NEW] [api.js](file:///c:/Users/frame/Documents/GitHub/POS/frontend/src/services/api.js)
+- Axios instance สำหรับเรียก API
+- Base URL: http://localhost:3001/api
+
+---
+
+## Database Schema
+
+```sql
+-- Products table
+CREATE TABLE products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    barcode TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    price REAL NOT NULL,
+    cost REAL DEFAULT 0,
+    unit TEXT DEFAULT 'ชิ้น',
+    stock INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Transactions table
+CREATE TABLE transactions (
+    id TEXT PRIMARY KEY,
+    subtotal REAL NOT NULL,
+    discount REAL DEFAULT 0,
+    total REAL NOT NULL,
+    payment_method TEXT NOT NULL,
+    cash_received REAL,
+    change_amount REAL,
+    status TEXT DEFAULT 'completed',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Transaction items
+CREATE TABLE transaction_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transaction_id TEXT NOT NULL,
+    product_id INTEGER NOT NULL,
+    product_name TEXT NOT NULL,
+    price REAL NOT NULL,
+    quantity INTEGER NOT NULL,
+    subtotal REAL NOT NULL,
+    FOREIGN KEY (transaction_id) REFERENCES transactions(id),
+    FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
+-- Held bills
+CREATE TABLE held_bills (
+    id TEXT PRIMARY KEY,
+    cart_data TEXT NOT NULL,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `F2` | Focus ช่องค้นหาสินค้า |
+| `F9` | เปิดหน้า Checkout |
+| `Esc` | เคลียร์ช่อง barcode / ปิด modal |
+| `Enter` | ยืนยันการเพิ่มสินค้า |
+
+---
+
+## Verification Plan
+
+### Automated Testing
+ไม่มี automated test ในขั้นแรก เนื่องจากเป็นโปรเจคใหม่
+
+### Manual Verification
+
+**1. ทดสอบ Backend API**
+```bash
+# Start backend server
+cd backend
+npm install
+npm run dev
+
+# Test endpoints with curl หรือ Postman
+curl http://localhost:3001/api/products
+```
+
+**2. ทดสอบ Frontend**
+```bash
+# Start frontend dev server
+cd frontend
+npm install
+npm run dev
+
+# Open http://localhost:5173
+```
+
+**3. ทดสอบ Flow การขาย**
+1. เพิ่มสินค้าตัวอย่าง 2-3 รายการ
+2. เปิดหน้า POS
+3. พิมพ์ barcode ในช่อง scanner แล้วกด Enter
+4. ตรวจสอบว่าสินค้าเข้าตะกร้า
+5. พิมพ์ barcode เดิมซ้ำ → จำนวนเพิ่มขึ้น
+6. กดปุ่ม Checkout → เลือกวิธีชำระ → จบการขาย
+7. ตรวจสอบ stock ลดลง
+
+**4. ทดสอบ Keyboard Shortcuts**
+1. กด F2 → cursor ไปที่ช่องค้นหา
+2. กด F9 → เปิด checkout modal
+3. กด Esc → ปิด modal
+
+---
+
+## Timeline Estimate
+
+| Phase | Estimated Time |
+|-------|---------------|
+| Project Setup | 30 mins |
+| Backend APIs | 1 hour |
+| POS Main Screen | 1.5 hours |
+| Product Management | 45 mins |
+| Reports | 45 mins |
+| Polish & Testing | 30 mins |
+
+**Total: ~5 hours**
+
+---
+
+## Questions for User
+
+1. **สต็อกสินค้า**: ต้องการตัดสต็อกอัตโนมัติเมื่อขายหรือไม่?
+2. **พิมพ์ใบเสร็จ**: ต้องการระบบพิมพ์ใบเสร็จหรือไม่?
+3. **หลายผู้ใช้/สิทธิ์**: ต้องการระบบ login และสิทธิ์ผู้ใช้หรือไม่?
+4. **PromptPay QR**: ต้องการ generate QR Code สำหรับ PromptPay หรือไม่?

@@ -1,0 +1,43 @@
+# POS System Development Task
+
+## Overview
+Build a complete Point of Sale (POS) system for a grocery store with Vue.js frontend and Node.js backend.
+
+## Tasks
+
+### Phase 1: Project Setup
+- [/] Initialize Vue.js frontend project
+- [/] Initialize Node.js backend project
+- [ ] Setup project structure and dependencies
+
+### Phase 2: Backend Development
+- [ ] Setup Express server with SQLite database
+- [ ] Create Product API (CRUD operations)
+- [ ] Create Sales/Transaction API
+- [ ] Create Stock management API
+- [ ] Create Reports API
+
+### Phase 3: Frontend - Core POS Screen
+- [ ] Create main POS layout (scan zone, cart, bill summary)
+- [ ] Implement barcode scanner input handling
+- [ ] Implement shopping cart functionality
+- [ ] Implement checkout/payment flow
+- [ ] Add keyboard shortcuts (F2, F9, Esc)
+
+### Phase 4: Frontend - Product Management
+- [ ] Create product list/management page
+- [ ] Create add/edit product form
+- [ ] Implement barcode, name, price, cost, unit, stock fields
+
+### Phase 5: Frontend - Reports
+- [ ] Daily/Monthly sales reports
+- [ ] Bill count summary
+- [ ] Top selling products
+- [ ] Profit summary (if cost available)
+
+### Phase 6: Additional Features
+- [ ] Hold bill functionality
+- [ ] Void bill functionality
+- [ ] Database backup export
+- [ ] Export reports to CSV/Excel
+- [ ] Low stock alerts

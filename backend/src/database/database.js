@@ -168,14 +168,14 @@ class DatabaseWrapper {
     }
     
     transaction(fn) {
+        // sql.js doesn't support explicit transactions well in this wrapper
+        // Just run the function and save - each statement is auto-committed
         return () => {
             try {
-                db.run('BEGIN TRANSACTION');
                 fn();
-                db.run('COMMIT');
                 saveDatabase();
             } catch (e) {
-                db.run('ROLLBACK');
+                console.error('Transaction error:', e);
                 throw e;
             }
         };

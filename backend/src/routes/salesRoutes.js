@@ -50,6 +50,8 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
     try {
         const { items, subtotal, discount = 0, total, payment_method, cash_received, change_amount } = req.body;
+        
+        console.log('Sale request:', { items, subtotal, discount, total, payment_method, cash_received, change_amount });
 
         if (!items || items.length === 0) {
             return res.status(400).json({ error: 'Cart is empty' });
@@ -57,6 +59,24 @@ router.post('/', (req, res) => {
 
         if (!payment_method) {
             return res.status(400).json({ error: 'Payment method is required' });
+        }
+
+        // Check stock availability for all items before processing
+        const stockErrors = [];
+        for (const item of items) {
+            const product = db.prepare('SELECT id, name, stock FROM products WHERE id = ?').get(item.product_id);
+            if (!product) {
+                stockErrors.push(`ไม่พบสินค้า: ${item.product_name}`);
+            } else if (product.stock < item.quantity) {
+                stockErrors.push(`${product.name}: มีสต็อก ${product.stock} ชิ้น แต่ต้องการ ${item.quantity} ชิ้น`);
+            }
+        }
+
+        if (stockErrors.length > 0) {
+            return res.status(400).json({ 
+                error: 'สต็อกไม่เพียงพอ', 
+                details: stockErrors 
+            });
         }
 
         const transactionId = uuidv4();
@@ -70,31 +90,30 @@ router.post('/', (req, res) => {
             `).run(transactionId, subtotal, discount, total, payment_method, cash_received || null, change_amount || null);
 
             // Insert items and deduct stock
-            const insertItem = db.prepare(`
-                INSERT INTO transaction_items (transaction_id, product_id, product_name, price, cost, quantity, subtotal)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            `);
-
-            const updateStock = db.prepare(`
-                UPDATE products SET stock = stock - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-            `);
-
             for (const item of items) {
+                console.log('Processing item:', item);
+                
                 // Get product to get cost
                 const product = db.prepare('SELECT * FROM products WHERE id = ?').get(item.product_id);
+                console.log('Found product:', product);
 
-                insertItem.run(
+                db.prepare(`
+                    INSERT INTO transaction_items (transaction_id, product_id, product_name, price, cost, quantity, subtotal)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                `).run(
                     transactionId,
                     item.product_id,
                     item.product_name,
                     item.price,
-                    product ? product.cost : 0,
+                    product ? product.cost : (item.cost || 0),
                     item.quantity,
                     item.subtotal
                 );
 
                 // Deduct stock automatically
-                updateStock.run(item.quantity, item.product_id);
+                db.prepare(`
+                    UPDATE products SET stock = stock - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+                `).run(item.quantity, item.product_id);
             }
         });
 
@@ -103,8 +122,10 @@ router.post('/', (req, res) => {
         const transaction = db.prepare('SELECT * FROM transactions WHERE id = ?').get(transactionId);
         const transactionItems = db.prepare('SELECT * FROM transaction_items WHERE transaction_id = ?').all(transactionId);
 
+        console.log('Sale completed:', { transaction, transactionItems });
         res.status(201).json({ ...transaction, items: transactionItems });
     } catch (error) {
+        console.error('Sale error:', error);
         res.status(500).json({ error: error.message });
     }
 });

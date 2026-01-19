@@ -19,17 +19,14 @@ const isActive = (path) => {
       <router-link to="/" :class="{ active: isActive('/') }">
         <span class="nav-icon">💳</span>
         <span class="nav-text">ขายสินค้า</span>
-        <span class="shortcut">F1</span>
       </router-link>
       <router-link to="/products" :class="{ active: isActive('/products') }">
         <span class="nav-icon">📦</span>
         <span class="nav-text">สินค้า</span>
-        <span class="shortcut">F3</span>
       </router-link>
       <router-link to="/reports" :class="{ active: isActive('/reports') }">
         <span class="nav-icon">📊</span>
         <span class="nav-text">รายงาน</span>
-        <span class="shortcut">F4</span>
       </router-link>
     </div>
     <div class="nav-time">

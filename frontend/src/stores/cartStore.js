@@ -37,6 +37,7 @@ export const useCartStore = defineStore('cart', () => {
                 price: product.price,
                 cost: product.cost || 0,
                 unit: product.unit,
+                stock: product.stock || 0,
                 quantity: 1,
                 subtotal: product.price
             });
@@ -65,9 +66,15 @@ export const useCartStore = defineStore('cart', () => {
     function increaseQuantity(productId) {
         const item = items.value.find(item => item.product_id === productId);
         if (item) {
+            // Check if increasing would exceed stock
+            if (item.quantity + 1 > item.stock) {
+                return { success: false, message: `สต็อกไม่พอ: มีสต็อก ${item.stock} ชิ้น` };
+            }
             item.quantity += 1;
             item.subtotal = item.quantity * item.price;
+            return { success: true };
         }
+        return { success: false, message: 'ไม่พบสินค้า' };
     }
 
     function decreaseQuantity(productId) {

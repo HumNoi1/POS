@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useCartStore } from '../stores/cartStore';
 import { productsApi, salesApi } from '../services/api';
+import BarcodeScanner from '../components/BarcodeScanner.vue';
 
 const cartStore = useCartStore();
 
@@ -12,6 +13,7 @@ const searchResults = ref([]);
 const showQuickAdd = ref(false);
 const showCheckout = ref(false);
 const showHeldBills = ref(false);
+const showScanner = ref(false);
 const heldBills = ref([]);
 const loading = ref(false);
 const error = ref('');
@@ -30,6 +32,7 @@ const quickAddForm = ref({
 // Checkout
 const paymentMethod = ref('cash');
 const cashReceived = ref('');
+const paymentVerified = ref(false);
 
 const changeAmount = computed(() => {
   if (paymentMethod.value !== 'cash' || !cashReceived.value) return 0;
@@ -52,9 +55,23 @@ const handleBarcodeSubmit = async () => {
   
   try {
     const response = await productsApi.getByBarcode(barcode);
-    cartStore.addItem(response.data);
+    const product = response.data;
+    
+    // Check current quantity in cart
+    const existingItem = cartStore.items.find(item => item.product_id === product.id);
+    const currentQtyInCart = existingItem ? existingItem.quantity : 0;
+    
+    // Check if adding one more would exceed stock
+    if (currentQtyInCart + 1 > product.stock) {
+      error.value = `⚠️ สต็อกไม่พอ: ${product.name} มีสต็อก ${product.stock} ชิ้น (ในตะกร้ามี ${currentQtyInCart} ชิ้นแล้ว)`;
+      barcodeInput.value = '';
+      focusBarcodeInput();
+      return;
+    }
+    
+    cartStore.addItem(product);
     barcodeInput.value = '';
-    success.value = `เพิ่ม ${response.data.name} แล้ว`;
+    success.value = `เพิ่ม ${product.name} แล้ว (คงเหลือในสต็อก: ${product.stock - currentQtyInCart - 1})`;
     setTimeout(() => success.value = '', 2000);
   } catch (err) {
     if (err.response?.status === 404) {
@@ -67,6 +84,13 @@ const handleBarcodeSubmit = async () => {
   }
   
   focusBarcodeInput();
+};
+
+// Handle barcode scanned from camera
+const handleScanResult = async (barcode) => {
+  showScanner.value = false;
+  barcodeInput.value = barcode;
+  await handleBarcodeSubmit();
 };
 
 // Quick add product
@@ -125,10 +149,16 @@ const handleCheckout = async () => {
     cartStore.clearCart();
     showCheckout.value = false;
     cashReceived.value = '';
+    paymentVerified.value = false;
     success.value = '✅ บันทึกการขายสำเร็จ!';
     setTimeout(() => success.value = '', 3000);
   } catch (err) {
-    error.value = err.response?.data?.error || err.message;
+    const errorData = err.response?.data;
+    if (errorData?.details && errorData.details.length > 0) {
+      error.value = `${errorData.error}: ${errorData.details.join(', ')}`;
+    } else {
+      error.value = errorData?.error || err.message;
+    }
   } finally {
     loading.value = false;
     focusBarcodeInput();
@@ -167,6 +197,15 @@ const resumeHeldBill = async (bill) => {
   await salesApi.deleteHeldBill(bill.id);
   showHeldBills.value = false;
   focusBarcodeInput();
+};
+
+// Handle increase quantity with stock check
+const handleIncreaseQty = (productId) => {
+  const result = cartStore.increaseQuantity(productId);
+  if (!result.success) {
+    error.value = `⚠️ ${result.message}`;
+    setTimeout(() => error.value = '', 3000);
+  }
 };
 
 // Void/Clear cart
@@ -252,7 +291,10 @@ const presetAmounts = [20, 50, 100, 500, 1000];
             class="barcode-input"
             autocomplete="off"
           />
-          <div class="scanner-hint">กด Enter เพื่อเพิ่มสินค้า | F2 = Focus | Esc = Clear</div>
+          <button class="camera-scan-btn" @click="showScanner = true" title="สแกนด้วยกล้อง">
+            📷
+          </button>
+          <div class="scanner-hint">กด Enter เพื่อเพิ่มสินค้า | 📷 = สแกนด้วยกล้อง</div>
         </div>
 
         <!-- Shopping Cart -->
@@ -281,7 +323,7 @@ const presetAmounts = [20, 50, 100, 500, 1000];
                   <span class="col-qty">
                     <button class="qty-btn" @click="cartStore.decreaseQuantity(item.product_id)">−</button>
                     <span class="qty-value">{{ item.quantity }}</span>
-                    <button class="qty-btn" @click="cartStore.increaseQuantity(item.product_id)">+</button>
+                    <button class="qty-btn" @click="handleIncreaseQty(item.product_id)" :disabled="item.quantity >= item.stock">+</button>
                   </span>
                   <span class="col-total">฿{{ item.subtotal.toFixed(2) }}</span>
                   <span class="col-action">
@@ -469,6 +511,17 @@ const presetAmounts = [20, 50, 100, 500, 1000];
                 <p class="qr-amount">ยอด ฿{{ cartStore.total.toFixed(2) }}</p>
               </div>
             </div>
+            <div class="payment-verification">
+              <label class="verify-checkbox">
+                <input 
+                  type="checkbox" 
+                  v-model="paymentVerified"
+                  @keyup.enter="paymentVerified && handleCheckout()"
+                />
+                <span class="checkmark"></span>
+                <span class="verify-text">✅ ยืนยันว่าได้รับเงินแล้ว (กด Enter เพื่อยืนยัน)</span>
+              </label>
+            </div>
           </div>
 
           <div class="modal-actions">
@@ -476,7 +529,7 @@ const presetAmounts = [20, 50, 100, 500, 1000];
             <button 
               class="btn btn-success" 
               @click="handleCheckout" 
-              :disabled="loading || (paymentMethod === 'cash' && (!cashReceived || parseFloat(cashReceived) < cartStore.total))"
+              :disabled="loading || (paymentMethod === 'cash' && (!cashReceived || parseFloat(cashReceived) < cartStore.total)) || (paymentMethod === 'promptpay' && !paymentVerified)"
             >
               {{ loading ? 'กำลังบันทึก...' : '✅ ยืนยันชำระเงิน' }}
             </button>
@@ -518,6 +571,13 @@ const presetAmounts = [20, 50, 100, 500, 1000];
         </div>
       </div>
     </Transition>
+
+    <!-- Barcode Scanner Modal -->
+    <BarcodeScanner 
+      :show="showScanner" 
+      @scan="handleScanResult" 
+      @close="showScanner = false" 
+    />
   </div>
 </template>
 
@@ -580,6 +640,22 @@ const presetAmounts = [20, 50, 100, 500, 1000];
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.5);
   white-space: nowrap;
+}
+
+.camera-scan-btn {
+  padding: 0.8rem 1.2rem;
+  font-size: 1.5rem;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #7c3aed, #00d4ff);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.camera-scan-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 5px 20px rgba(124, 58, 237, 0.4);
 }
 
 /* Cart Zone */
@@ -1115,6 +1191,46 @@ const presetAmounts = [20, 50, 100, 500, 1000];
   font-weight: 700;
   color: #00d4ff;
   margin: 0;
+}
+
+/* Payment Verification */
+.payment-verification {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: rgba(0, 212, 255, 0.1);
+  border-radius: 12px;
+  border: 2px dashed rgba(0, 212, 255, 0.3);
+}
+
+.verify-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  transition: all 0.2s;
+}
+
+.verify-checkbox:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.verify-checkbox input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  accent-color: #00d4ff;
+}
+
+.verify-text {
+  font-size: 1rem;
+  color: #fff;
+  font-weight: 500;
+}
+
+.verify-checkbox input[type="checkbox"]:checked + .checkmark + .verify-text {
+  color: #00d4ff;
 }
 
 /* Held Bills */

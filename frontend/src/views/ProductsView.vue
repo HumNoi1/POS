@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { productsApi } from '../services/api';
+import BarcodeScanner from '../components/BarcodeScanner.vue';
 
 // State
 const products = ref([]);
@@ -9,6 +10,7 @@ const error = ref('');
 const success = ref('');
 const searchQuery = ref('');
 const showForm = ref(false);
+const showScanner = ref(false);
 const editingProduct = ref(null);
 
 // Form
@@ -132,6 +134,19 @@ const updateStock = async (product, adjustment) => {
   }
 };
 
+const handleScanResult = (barcode) => {
+  showScanner.value = false;
+  // If form is open, fill barcode
+  if (showForm.value) {
+    if (!editingProduct.value) { // Only allow if adding new product or explicitly enabled
+       form.value.barcode = barcode;
+    }
+  } else {
+    // If form is not open, maybe search?
+    searchQuery.value = barcode;
+  }
+};
+
 onMounted(() => {
   loadProducts();
 });
@@ -237,13 +252,23 @@ onMounted(() => {
           
           <div class="form-group">
             <label>บาร์โค้ด *</label>
-            <input 
-              v-model="form.barcode" 
-              type="text" 
-              class="input" 
-              placeholder="สแกนหรือพิมพ์บาร์โค้ด"
-              :disabled="!!editingProduct"
-            />
+            <div class="input-with-btn">
+              <input 
+                v-model="form.barcode" 
+                type="text" 
+                class="input" 
+                placeholder="สแกนหรือพิมพ์บาร์โค้ด"
+                :disabled="!!editingProduct"
+              />
+              <button 
+                v-if="!editingProduct" 
+                class="btn-icon" 
+                @click="showScanner = true"
+                title="สแกนบาร์โค้ด"
+              >
+                📷
+              </button>
+            </div>
           </div>
 
           <div class="form-group">
@@ -313,6 +338,14 @@ onMounted(() => {
         </div>
       </div>
     </Transition>
+
+
+    <!-- Barcode Scanner Modal -->
+    <BarcodeScanner 
+      :show="showScanner" 
+      @scan="handleScanResult" 
+      @close="showScanner = false" 
+    />
   </div>
 </template>
 
@@ -647,6 +680,32 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
+}
+
+.input-with-btn {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-icon {
+  width: 46px;
+  height: 46px; /* Match input height roughly */
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #7c3aed, #00d4ff);
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
 }
 
 .input {
